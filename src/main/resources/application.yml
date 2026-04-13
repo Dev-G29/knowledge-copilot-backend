@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: knowledge-copilot
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+  ai:
+    model:
+      embedding:
+        text: ${SPRING_AI_EMBEDDING_PROVIDER:google-genai}
+    google:
+      genai:
+        api-key: ${GEMINI_API_KEY:}
+        chat:
+          options:
+            model: ${GEMINI_CHAT_MODEL:gemini-2.5-flash}
+        embedding:
+          api-key: ${GEMINI_API_KEY:}
+          text:
+            options:
+              model: ${GEMINI_EMBEDDING_MODEL:gemini-embedding-001}
+              task-type: ${GEMINI_EMBEDDING_TASK_TYPE:RETRIEVAL_DOCUMENT}
+              auto-truncate: true
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/knowledgeCopilot}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:1234}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: false
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+
+application:
+  security:
+    jwt:
+      secret: change-me-to-a-very-long-production-secret-key-1234567890
+      access-token-expiration-minutes: 60

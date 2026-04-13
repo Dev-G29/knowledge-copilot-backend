@@ -1,0 +1,13 @@
+# Spring Boot
+target/
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Env
+.env
