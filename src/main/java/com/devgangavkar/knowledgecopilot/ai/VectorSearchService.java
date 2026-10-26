@@ -1,12 +1,9 @@
 package com.devgangavkar.knowledgecopilot.ai;
 
-import com.devgangavkar.knowledgecopilot.entity.DocumentChunk;
 import com.devgangavkar.knowledgecopilot.repository.DocumentChunkRepository;
-import java.util.Comparator;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -17,12 +14,12 @@ public class VectorSearchService {
     private final DocumentChunkRepository documentChunkRepository;
     private final EmbeddingService embeddingService;
 
-    @Transactional(readOnly = true)
     public List<SimilaritySearchResult> searchSimilarChunks(String query) {
         return searchSimilarChunks(query, DEFAULT_TOP_K);
     }
 
-    @Transactional(readOnly = true)
+    // Deliberately not transactional: the embedding call goes to Gemini over the network and
+    // should not hold a database connection. The repository query runs in its own read-only transaction.
     public List<SimilaritySearchResult> searchSimilarChunks(String query, int topK) {
         if (query == null || query.isBlank()) {
             throw new IllegalArgumentException("Query is required");
@@ -31,36 +28,28 @@ public class VectorSearchService {
             throw new IllegalArgumentException("topK must be greater than zero");
         }
 
-        List<Double> queryEmbedding = embeddingService.embed(query);
+        String queryVector = toVectorLiteral(embeddingService.embedQuery(query));
 
-        return documentChunkRepository.findAllWithEmbedding().stream()
-                .map(chunk -> new SimilaritySearchResult(chunk, cosineSimilarity(queryEmbedding, chunk.getEmbedding())))
-                .sorted(Comparator.comparingDouble(SimilaritySearchResult::score).reversed())
-                .limit(topK)
+        return documentChunkRepository.findNearest(queryVector, topK).stream()
+                .map(match -> new SimilaritySearchResult(
+                        match.getChunkId(),
+                        match.getDocumentId(),
+                        match.getDocumentName(),
+                        match.getContent(),
+                        match.getScore() == null ? -1.0d : match.getScore()
+                ))
                 .toList();
     }
 
-    private double cosineSimilarity(List<Double> left, List<Double> right) {
-        if (left == null || right == null || left.isEmpty() || right.isEmpty() || left.size() != right.size()) {
-            return -1.0d;
+    // pgvector's text input format: [0.1,0.2,...]
+    static String toVectorLiteral(float[] vector) {
+        StringBuilder builder = new StringBuilder(vector.length * 12).append('[');
+        for (int index = 0; index < vector.length; index++) {
+            if (index > 0) {
+                builder.append(',');
+            }
+            builder.append(vector[index]);
         }
-
-        double dotProduct = 0.0d;
-        double leftMagnitude = 0.0d;
-        double rightMagnitude = 0.0d;
-
-        for (int index = 0; index < left.size(); index++) {
-            double leftValue = left.get(index);
-            double rightValue = right.get(index);
-            dotProduct += leftValue * rightValue;
-            leftMagnitude += leftValue * leftValue;
-            rightMagnitude += rightValue * rightValue;
-        }
-
-        if (leftMagnitude == 0.0d || rightMagnitude == 0.0d) {
-            return -1.0d;
-        }
-
-        return dotProduct / (Math.sqrt(leftMagnitude) * Math.sqrt(rightMagnitude));
+        return builder.append(']').toString();
     }
 }

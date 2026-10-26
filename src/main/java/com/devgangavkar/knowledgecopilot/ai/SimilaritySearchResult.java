@@ -1,9 +1,10 @@
 package com.devgangavkar.knowledgecopilot.ai;
 
-import com.devgangavkar.knowledgecopilot.entity.DocumentChunk;
-
 public record SimilaritySearchResult(
-        DocumentChunk chunk,
+        Long chunkId,
+        Long documentId,
+        String documentName,
+        String content,
         double score
 ) {
 }

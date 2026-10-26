@@ -7,6 +7,7 @@ public record AuthResponse(
         String tokenType,
         long expiresInMinutes,
         String username,
+        String email,
         Set<String> roles
 ) {
 }

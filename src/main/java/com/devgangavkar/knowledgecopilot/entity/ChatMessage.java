@@ -1,5 +1,6 @@
 package com.devgangavkar.knowledgecopilot.entity;
 
+import com.devgangavkar.knowledgecopilot.dto.ChatSourceResponse;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -10,11 +11,14 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Getter
 @Setter
@@ -41,4 +45,10 @@ public class ChatMessage {
 
     @Column(nullable = false)
     private Instant timestamp;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private List<ChatSourceResponse> sources;
+
+    private Double confidence;
 }

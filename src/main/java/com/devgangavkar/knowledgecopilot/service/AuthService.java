@@ -3,6 +3,7 @@ package com.devgangavkar.knowledgecopilot.service;
 import com.devgangavkar.knowledgecopilot.dto.AuthRequest;
 import com.devgangavkar.knowledgecopilot.dto.AuthResponse;
 import com.devgangavkar.knowledgecopilot.dto.RegisterRequest;
+import com.devgangavkar.knowledgecopilot.dto.UserProfileResponse;
 
 public interface AuthService {
 
@@ -12,4 +13,7 @@ public interface AuthService {
 
     // Verifies username/password credentials and returns a fresh JWT on success.
     AuthResponse login(AuthRequest request);
+
+    // Returns the profile of the authenticated caller.
+    UserProfileResponse currentUser();
 }

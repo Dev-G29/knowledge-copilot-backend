@@ -9,4 +9,8 @@ public interface ConversationService {
     List<ConversationDto> listRecentConversations();
 
     List<ConversationMessageDto> getConversationMessages(Long conversationId);
+
+    ConversationDto renameConversation(Long conversationId, String title);
+
+    void deleteConversation(Long conversationId);
 }

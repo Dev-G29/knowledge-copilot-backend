@@ -1,0 +1,20 @@
+# Caddy obtains and renews a Let's Encrypt certificate for API_DOMAIN automatically.
+{$API_DOMAIN} {
+	# No "encode" directive: compressing text/event-stream would buffer streamed answers.
+	reverse_proxy backend:8080 {
+		# Flush immediately so server-sent events reach the browser token by token.
+		flush_interval -1
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

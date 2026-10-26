@@ -4,18 +4,23 @@ import com.devgangavkar.knowledgecopilot.dto.ChatQueryRequest;
 import com.devgangavkar.knowledgecopilot.dto.ChatQueryResponse;
 import com.devgangavkar.knowledgecopilot.dto.ConversationDto;
 import com.devgangavkar.knowledgecopilot.dto.ConversationMessageDto;
+import com.devgangavkar.knowledgecopilot.dto.RenameConversationRequest;
 import com.devgangavkar.knowledgecopilot.service.ChatService;
 import com.devgangavkar.knowledgecopilot.service.ConversationService;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Flux;
 
 @RestController
 @RequestMapping("/chat")
@@ -30,6 +35,13 @@ public class ChatController {
         return ResponseEntity.ok(chatService.query(request.query(), request.conversationId()));
     }
 
+    // Returns text/event-stream (meta, token..., done|error). No "produces" restriction on purpose:
+    // errors raised before streaming starts are still rendered as JSON by GlobalExceptionHandler.
+    @PostMapping("/stream")
+    public Flux<ServerSentEvent<Object>> stream(@Valid @RequestBody ChatQueryRequest request) {
+        return chatService.stream(request.query(), request.conversationId());
+    }
+
     @GetMapping("/conversations")
     public ResponseEntity<List<ConversationDto>> listConversations() {
         return ResponseEntity.ok(conversationService.listRecentConversations());
@@ -38,5 +50,19 @@ public class ChatController {
     @GetMapping("/conversations/{id}")
     public ResponseEntity<List<ConversationMessageDto>> getConversationMessages(@PathVariable Long id) {
         return ResponseEntity.ok(conversationService.getConversationMessages(id));
+    }
+
+    @PatchMapping("/conversations/{id}")
+    public ResponseEntity<ConversationDto> renameConversation(
+            @PathVariable Long id,
+            @Valid @RequestBody RenameConversationRequest request
+    ) {
+        return ResponseEntity.ok(conversationService.renameConversation(id, request.title()));
+    }
+
+    @DeleteMapping("/conversations/{id}")
+    public ResponseEntity<Void> deleteConversation(@PathVariable Long id) {
+        conversationService.deleteConversation(id);
+        return ResponseEntity.noContent().build();
     }
 }
