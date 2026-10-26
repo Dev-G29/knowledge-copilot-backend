@@ -1,0 +1,9 @@
+target/
+graphify-out/
+deploy/
+.git/
+.github/
+.idea/
+.vscode/
+*.log
+.env

@@ -3,11 +3,13 @@ package com.devgangavkar.knowledgecopilot.controller;
 import com.devgangavkar.knowledgecopilot.dto.AuthRequest;
 import com.devgangavkar.knowledgecopilot.dto.AuthResponse;
 import com.devgangavkar.knowledgecopilot.dto.RegisterRequest;
+import com.devgangavkar.knowledgecopilot.dto.UserProfileResponse;
 import com.devgangavkar.knowledgecopilot.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -30,5 +32,11 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody AuthRequest request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    // Lets the client check that a stored token is still valid and refresh the user's roles.
+    @GetMapping("/me")
+    public ResponseEntity<UserProfileResponse> me() {
+        return ResponseEntity.ok(authService.currentUser());
     }
 }

@@ -7,6 +7,8 @@ public record DocumentUploadResponse(
         String name,
         String uploadedBy,
         Instant createdAt,
+        String contentType,
+        Long sizeBytes,
         int chunkCount
 ) {
 }

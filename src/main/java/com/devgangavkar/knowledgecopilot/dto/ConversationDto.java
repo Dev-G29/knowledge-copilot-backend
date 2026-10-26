@@ -1,10 +1,11 @@
 package com.devgangavkar.knowledgecopilot.dto;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 public record ConversationDto(
         Long id,
         String title,
-        LocalDateTime createdAt
+        Instant createdAt,
+        Instant updatedAt
 ) {
 }

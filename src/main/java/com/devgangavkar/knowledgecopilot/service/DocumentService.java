@@ -13,4 +13,7 @@ public interface DocumentService {
 
     // Returns the stored document metadata so the UI or API client can list uploads.
     List<DocumentResponse> getDocuments();
+
+    // Removes a document and all of its chunks/embeddings.
+    void delete(Long documentId);
 }

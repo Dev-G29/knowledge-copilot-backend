@@ -1,0 +1,22 @@
+spring:
+  ai:
+    model:
+      # Real Gemini models are replaced by deterministic fakes (see FakeAiConfiguration).
+      chat: none
+      embedding:
+        text: none
+    google:
+      genai:
+        # The Gemini connection beans still load; a dummy key keeps them happy. No calls are made.
+        api-key: test-key
+        embedding:
+          api-key: test-key
+
+application:
+  admin:
+    username: admin
+    email: admin@example.com
+    password: admin-test-password
+  rate-limit:
+    chat-requests-per-minute: 1000
+    auth-requests-per-minute: 1000

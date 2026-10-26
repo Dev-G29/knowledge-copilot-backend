@@ -1,0 +1,117 @@
+# Production stack for the Oracle Cloud VM (also runs locally for testing).
+#   docker compose up -d                      # backend + postgres + caddy + nightly local backups
+#   docker compose --profile offsite up -d    # ...plus copying backups to OCI Object Storage
+name: knowledge-copilot
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-knowledge_copilot}
+      POSTGRES_USER: ${POSTGRES_USER:-copilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+
+  backend:
+    image: ${BACKEND_IMAGE:-ghcr.io/dev-g29/knowledge-copilot-backend:latest}
+    build:
+      context: ..
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-knowledge_copilot}
+      DB_USERNAME: ${POSTGRES_USER:-copilot}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?set GEMINI_API_KEY in .env}
+      GEMINI_CHAT_MODEL: ${GEMINI_CHAT_MODEL:-gemini-2.5-flash}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?set CORS_ALLOWED_ORIGINS in .env}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_SYNC_PASSWORD: ${ADMIN_SYNC_PASSWORD:-false}
+      RATE_LIMIT_CHAT_PER_MINUTE: ${RATE_LIMIT_CHAT_PER_MINUTE:-20}
+      JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=60 -XX:+ExitOnOutOfMemoryError}
+    networks: [internal, web]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [backend]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [web]
+
+  # Nightly pg_dump into ./backups (kept 14 days).
+  backup:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGDATABASE: ${POSTGRES_DB:-knowledge_copilot}
+      PGUSER: ${POSTGRES_USER:-copilot}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+    volumes:
+      - ./backups:/backups
+      - ./backup.sh:/usr/local/bin/backup.sh:ro
+    entrypoint: ["bash", "/usr/local/bin/backup.sh"]
+    networks: [internal]
+
+  # Optional: copy ./backups to OCI Object Storage (S3-compatible API, 20 GB free).
+  offsite-backup:
+    profiles: [offsite]
+    image: rclone/rclone:1
+    restart: unless-stopped
+    environment:
+      RCLONE_CONFIG_OCI_TYPE: s3
+      RCLONE_CONFIG_OCI_PROVIDER: Other
+      RCLONE_CONFIG_OCI_ACCESS_KEY_ID: ${OCI_S3_ACCESS_KEY:-}
+      RCLONE_CONFIG_OCI_SECRET_ACCESS_KEY: ${OCI_S3_SECRET_KEY:-}
+      RCLONE_CONFIG_OCI_ENDPOINT: ${OCI_S3_ENDPOINT:-}
+      RCLONE_CONFIG_OCI_REGION: ${OCI_REGION:-}
+      RCLONE_CONFIG_OCI_FORCE_PATH_STYLE: "true"
+      OCI_BUCKET: ${OCI_BUCKET:-knowledge-copilot-backups}
+    volumes:
+      - ./backups:/backups:ro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        while true; do
+          rclone copy /backups "oci:$${OCI_BUCKET}" --include "*.dump" --max-age 3d -v
+          rclone delete "oci:$${OCI_BUCKET}" --min-age 30d -v
+          sleep 86400
+        done
+    networks: [web]
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:
+  web:

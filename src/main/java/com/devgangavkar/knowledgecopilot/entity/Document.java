@@ -39,6 +39,11 @@ public class Document {
     @Column(nullable = false)
     private Instant createdAt;
 
+    @Column(length = 100)
+    private String contentType;
+
+    private Long sizeBytes;
+
     @Builder.Default
     @OneToMany(mappedBy = "document", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<DocumentChunk> chunks = new ArrayList<>();

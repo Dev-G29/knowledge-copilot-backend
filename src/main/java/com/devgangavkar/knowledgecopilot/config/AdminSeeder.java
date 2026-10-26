@@ -16,33 +16,48 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class AdminSeeder implements CommandLineRunner {
 
-    private static final String ADMIN_USERNAME = "admin";
-    private static final String ADMIN_EMAIL = "admin@example.com";
-    private static final String ADMIN_PASSWORD = "admin123";
-
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final ApplicationProperties applicationProperties;
 
     @Override
     public void run(String... args) {
+        ApplicationProperties.Admin admin = applicationProperties.admin();
+        if (admin == null || admin.password() == null || admin.password().isBlank()) {
+            log.info("ADMIN_PASSWORD is not set, skipping admin seeding.");
+            return;
+        }
+
+        String username = admin.username().trim();
+        String email = admin.email().trim().toLowerCase();
+
+        // Lets an operator rotate the admin password (e.g. after migrating an old database)
+        // by setting ADMIN_SYNC_PASSWORD=true for one deploy.
+        if (admin.syncPassword()) {
+            userRepository.findByUsername(username).ifPresent(existing -> {
+                existing.setPassword(passwordEncoder.encode(admin.password()));
+                existing.getRoles().add(Role.ADMIN);
+                userRepository.save(existing);
+                log.info("Admin password synchronised for username='{}'.", username);
+            });
+        }
+
         if (userRepository.existsByRolesContaining(Role.ADMIN)) {
             log.info("Admin user already exists, skipping admin seeding.");
             return;
         }
 
-        if (userRepository.existsByUsername(ADMIN_USERNAME) || userRepository.existsByEmail(ADMIN_EMAIL)) {
+        if (userRepository.existsByUsername(username) || userRepository.existsByEmail(email)) {
             log.warn("Admin role is missing but an admin username or email is already present. Skipping auto-creation to avoid duplicate credentials.");
             return;
         }
 
-        User admin = User.builder()
-                .username(ADMIN_USERNAME)
-                .email(ADMIN_EMAIL)
-                .password(passwordEncoder.encode(ADMIN_PASSWORD))
+        userRepository.save(User.builder()
+                .username(username)
+                .email(email)
+                .password(passwordEncoder.encode(admin.password()))
                 .roles(new HashSet<>(Set.of(Role.ADMIN)))
-                .build();
-
-        userRepository.save(admin);
-        log.info("Default admin user created with username='{}' and email='{}'.", ADMIN_USERNAME, ADMIN_EMAIL);
+                .build());
+        log.info("Admin user created with username='{}' and email='{}'.", username, email);
     }
 }

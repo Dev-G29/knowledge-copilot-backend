@@ -3,10 +3,12 @@ package com.devgangavkar.knowledgecopilot.service.impl;
 import com.devgangavkar.knowledgecopilot.dto.AuthRequest;
 import com.devgangavkar.knowledgecopilot.dto.AuthResponse;
 import com.devgangavkar.knowledgecopilot.dto.RegisterRequest;
+import com.devgangavkar.knowledgecopilot.dto.UserProfileResponse;
 import com.devgangavkar.knowledgecopilot.entity.Role;
 import com.devgangavkar.knowledgecopilot.entity.User;
 import com.devgangavkar.knowledgecopilot.exception.UnauthorizedException;
 import com.devgangavkar.knowledgecopilot.repository.UserRepository;
+import com.devgangavkar.knowledgecopilot.security.CurrentUserService;
 import com.devgangavkar.knowledgecopilot.security.JwtUtil;
 import com.devgangavkar.knowledgecopilot.service.AuthService;
 import java.util.Set;
@@ -36,21 +38,27 @@ public class AuthServiceImpl implements AuthService {
     // Spring Security's AuthenticationManager performs the actual credential verification.
     private final AuthenticationManager authenticationManager;
 
+    private final CurrentUserService currentUserService;
+
     @Override
     @Transactional
     public AuthResponse register(RegisterRequest request) {
+        String username = request.username().trim();
+        String email = request.email().trim().toLowerCase();
+
         // Registration must fail fast if the username or email is already in use.
-        if (userRepository.existsByUsername(request.username())) {
+        // Emails are stored lower-cased, so the check uses the normalised value too.
+        if (userRepository.existsByUsername(username)) {
             throw new IllegalArgumentException("Username is already taken");
         }
-        if (userRepository.existsByEmail(request.email())) {
+        if (userRepository.existsByEmail(email)) {
             throw new IllegalArgumentException("Email is already registered");
         }
 
         // New users start with the USER role by default.
         User user = User.builder()
-                .username(request.username().trim())
-                .email(request.email().trim().toLowerCase())
+                .username(username)
+                .email(email)
                 .password(passwordEncoder.encode(request.password()))
                 .roles(new java.util.HashSet<>(Set.of(Role.USER)))
                 .build();
@@ -83,6 +91,17 @@ public class AuthServiceImpl implements AuthService {
         }
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public UserProfileResponse currentUser() {
+        User user = currentUserService.requireCurrentUser();
+        return new UserProfileResponse(
+                user.getUsername(),
+                user.getEmail(),
+                user.getRoles().stream().map(Enum::name).collect(Collectors.toSet())
+        );
+    }
+
     private String resolveUsernameForLogin(String loginIdentifier) {
         if (loginIdentifier.contains("@")) {
             // Emails are stored normalized, so we do the same before lookup.
@@ -100,6 +119,7 @@ public class AuthServiceImpl implements AuthService {
                 "Bearer",
                 jwtUtil.getAccessTokenExpirationMinutes(),
                 user.getUsername(),
+                user.getEmail(),
                 user.getRoles().stream().map(Enum::name).collect(Collectors.toSet())
         );
     }

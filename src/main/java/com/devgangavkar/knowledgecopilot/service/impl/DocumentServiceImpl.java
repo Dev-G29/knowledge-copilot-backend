@@ -5,6 +5,8 @@ import com.devgangavkar.knowledgecopilot.dto.DocumentResponse;
 import com.devgangavkar.knowledgecopilot.dto.DocumentUploadResponse;
 import com.devgangavkar.knowledgecopilot.entity.Document;
 import com.devgangavkar.knowledgecopilot.entity.DocumentChunk;
+import com.devgangavkar.knowledgecopilot.exception.ResourceNotFoundException;
+import com.devgangavkar.knowledgecopilot.repository.DocumentChunkRepository;
 import com.devgangavkar.knowledgecopilot.repository.DocumentRepository;
 import com.devgangavkar.knowledgecopilot.service.DocumentService;
 import java.io.IOException;
@@ -50,10 +52,12 @@ public class DocumentServiceImpl implements DocumentService {
     private static final Pattern SENTENCE_SPLIT_PATTERN = Pattern.compile("(?<=[.!?])\\s+");
 
     private final DocumentRepository documentRepository;
+    private final DocumentChunkRepository documentChunkRepository;
     private final EmbeddingService embeddingService;
 
+    // Not transactional on purpose: embedding calls to Gemini can take a while and should not
+    // hold a database connection open. The final save runs in its own transaction.
     @Override
-    @Transactional
     public DocumentUploadResponse upload(MultipartFile file) {
         // Step 1: reject invalid uploads early before doing any expensive parsing.
         validateFile(file);
@@ -72,9 +76,11 @@ public class DocumentServiceImpl implements DocumentService {
                 .name(file.getOriginalFilename())
                 .uploadedBy(resolveCurrentUsername())
                 .createdAt(Instant.now())
+                .contentType(resolveContentType(file))
+                .sizeBytes(file.getSize())
                 .build();
 
-        List<List<Double>> embeddings = embeddingService.embedAll(chunks);
+        List<float[]> embeddings = embeddingService.embedAll(chunks);
 
         // Step 5: attach each generated chunk to the document so JPA can persist the full graph.
         List<DocumentChunk> documentChunks = new ArrayList<>(chunks.size());
@@ -95,6 +101,8 @@ public class DocumentServiceImpl implements DocumentService {
                 saved.getName(),
                 saved.getUploadedBy(),
                 saved.getCreatedAt(),
+                saved.getContentType(),
+                saved.getSizeBytes(),
                 saved.getChunks().size()
         );
     }
@@ -102,16 +110,31 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @Transactional(readOnly = true)
     public List<DocumentResponse> getDocuments() {
-        // This is just a metadata listing endpoint, so we map entities into lightweight DTOs.
-        return documentRepository.findAllByOrderByCreatedAtDesc().stream()
-                .map(document -> new DocumentResponse(
-                        document.getId(),
-                        document.getName(),
-                        document.getUploadedBy(),
-                        document.getCreatedAt(),
-                        document.getChunks().size()
-                ))
-                .toList();
+        // This is just a metadata listing endpoint, so chunk counts are computed in SQL.
+        return documentRepository.findAllSummaries();
+    }
+
+    @Override
+    @Transactional
+    public void delete(Long documentId) {
+        if (!documentRepository.existsById(documentId)) {
+            throw new ResourceNotFoundException("Document not found: " + documentId);
+        }
+
+        // Bulk deletes avoid loading every chunk (and its embedding) just to remove it.
+        documentChunkRepository.deleteByDocumentId(documentId);
+        documentRepository.deleteDocumentById(documentId);
+    }
+
+    private String resolveContentType(MultipartFile file) {
+        String lowerName = file.getOriginalFilename().toLowerCase();
+        if (lowerName.endsWith(".pdf")) {
+            return "application/pdf";
+        }
+        if (lowerName.endsWith(".docx")) {
+            return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        }
+        return "text/plain";
     }
 
     private void validateFile(MultipartFile file) {

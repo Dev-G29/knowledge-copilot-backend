@@ -2,6 +2,7 @@ package com.devgangavkar.knowledgecopilot.advices;
 
 import com.devgangavkar.knowledgecopilot.exception.AiServiceException;
 import com.devgangavkar.knowledgecopilot.exception.ApiErrorResponse;
+import com.devgangavkar.knowledgecopilot.exception.RateLimitExceededException;
 import com.devgangavkar.knowledgecopilot.exception.ResourceNotFoundException;
 import com.devgangavkar.knowledgecopilot.exception.UnauthorizedException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,6 +18,9 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @Slf4j
@@ -30,6 +34,37 @@ public class GlobalExceptionHandler {
     ) {
         log.warn("Resource not found for path {}: {}", request.getRequestURI(), exception.getMessage());
         return buildResponse(HttpStatus.NOT_FOUND, exception.getMessage(), request, List.of());
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleNoResource(
+            NoResourceFoundException exception,
+            HttpServletRequest request
+    ) {
+        return buildResponse(HttpStatus.NOT_FOUND, "Resource not found", request, List.of());
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ApiErrorResponse> handleRateLimit(
+            RateLimitExceededException exception,
+            HttpServletRequest request
+    ) {
+        log.warn("Rate limit exceeded for path {}", request.getRequestURI());
+        return buildResponse(HttpStatus.TOO_MANY_REQUESTS, exception.getMessage(), request, List.of());
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiErrorResponse> handleUploadTooLarge(
+            MaxUploadSizeExceededException exception,
+            HttpServletRequest request
+    ) {
+        return buildResponse(HttpStatus.PAYLOAD_TOO_LARGE, "File is too large (maximum 50 MB)", request, List.of());
+    }
+
+    // The client closed a streaming response (Stop button, closed tab). Nothing can be written back.
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public void handleClientDisconnect(AsyncRequestNotUsableException exception) {
+        log.debug("Client disconnected before the response completed: {}", exception.getMessage());
     }
 
     @ExceptionHandler({UnauthorizedException.class, AccessDeniedException.class})

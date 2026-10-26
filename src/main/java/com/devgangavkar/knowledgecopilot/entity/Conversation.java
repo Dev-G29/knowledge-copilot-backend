@@ -33,8 +33,14 @@ public class Conversation {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
+    @Column(length = 120)
+    private String title;
+
     @Column(nullable = false)
     private Instant createdAt;
+
+    @Column(nullable = false)
+    private Instant updatedAt;
 
     @Builder.Default
     @OneToMany(mappedBy = "conversation", cascade = CascadeType.ALL, orphanRemoval = true)
