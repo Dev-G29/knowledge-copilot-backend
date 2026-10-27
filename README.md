@@ -71,6 +71,7 @@ They cover migrations (including converting the old Render schema), vector searc
 | `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` | local Postgres | JDBC connection |
 | `GEMINI_API_KEY` | — | Required for chat and embeddings |
 | `GEMINI_CHAT_MODEL` | `gemini-3.8-flash` | |
+| `GEMINI_THINKING_LEVEL` | `LOW` | `MINIMAL` is fastest; `MEDIUM`/`HIGH` reason longer before answering |
 | `JWT_SECRET` | dev-only value | **Required** with `SPRING_PROFILES_ACTIVE=prod` (e.g. `openssl rand -base64 48`) |
 | `JWT_EXPIRATION_MINUTES` | `1440` | |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:3000` | Comma-separated, wildcards allowed |
