@@ -19,7 +19,7 @@ spring:
         api-key: ${GEMINI_API_KEY:}
         chat:
           options:
-            model: ${GEMINI_CHAT_MODEL:gemini-2.5-flash}
+            model: ${GEMINI_CHAT_MODEL:gemini-3.8-flash}
         embedding:
           api-key: ${GEMINI_API_KEY:}
           text:
