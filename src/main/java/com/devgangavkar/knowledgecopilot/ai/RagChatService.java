@@ -152,9 +152,9 @@ public class RagChatService implements ChatService {
                 .onErrorResume(exception -> {
                     log.error("Streaming chat query failed. conversationId={}, query=\"{}\", responseTimeMs={}",
                             prepared.conversationId(), abbreviateForLogs(normalizedQuery), elapsedMillis(startedAt), exception);
-                    if (finished.compareAndSet(false, true)) {
-                        discardIfEmpty(prepared);
-                    }
+                    // Keep the conversation: the client already received its id in the "meta" event and
+                    // will send follow-ups to it. While it has no messages it stays hidden from the list.
+                    finished.set(true);
                     return Mono.just(event("error", new ChatStreamEvents.Error(STREAM_FAILURE_MESSAGE)));
                 })
                 .doOnCancel(() -> {
@@ -163,9 +163,7 @@ public class RagChatService implements ChatService {
                         return;
                     }
                     String partialAnswer = answer.toString().trim();
-                    if (partialAnswer.isEmpty()) {
-                        discardIfEmpty(prepared);
-                    } else {
+                    if (!partialAnswer.isEmpty()) {
                         persist(prepared, partialAnswer);
                     }
                 });
