@@ -114,6 +114,8 @@ public class RagChatService implements ChatService {
         PreparedQuery prepared;
         try {
             prepared = prepare(normalizedQuery, conversationId);
+            log.info("Retrieval finished after {} ms. conversationId={}, chunks={}",
+                    elapsedMillis(startedAt), prepared.conversationId(), prepared.chunkCount());
         } catch (RuntimeException exception) {
             log.error("Failed to prepare streaming chat query. conversationId={}, query=\"{}\"",
                     conversationId, abbreviateForLogs(normalizedQuery), exception);
@@ -131,7 +133,12 @@ public class RagChatService implements ChatService {
                 new ChatStreamEvents.Meta(prepared.conversationId(), prepared.sources(), prepared.confidence())));
 
         Flux<ServerSentEvent<Object>> tokenEvents = tokens
-                .doOnNext(answer::append)
+                .doOnNext(text -> {
+                    if (answer.length() == 0) {
+                        log.info("First token after {} ms. conversationId={}", elapsedMillis(startedAt), prepared.conversationId());
+                    }
+                    answer.append(text);
+                })
                 .map(text -> event("token", new ChatStreamEvents.Token(text)));
 
         Mono<ServerSentEvent<Object>> done = Mono.fromCallable(() -> {

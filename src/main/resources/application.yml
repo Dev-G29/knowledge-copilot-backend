@@ -20,6 +20,9 @@ spring:
         chat:
           options:
             model: ${GEMINI_CHAT_MODEL:gemini-3.8-flash}
+            # Gemini 3.x "thinks" before answering. RAG answers are short lookups, so a low level
+            # cuts time-to-first-token a lot. MINIMAL | LOW | MEDIUM | HIGH
+            thinking-level: ${GEMINI_THINKING_LEVEL:LOW}
         embedding:
           api-key: ${GEMINI_API_KEY:}
           text:
