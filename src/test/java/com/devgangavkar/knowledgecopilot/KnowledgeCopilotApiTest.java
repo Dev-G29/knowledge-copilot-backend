@@ -163,6 +163,45 @@ class KnowledgeCopilotApiTest extends IntegrationTest {
     }
 
     @Test
+    void conversationSurvivesAFailedStreamSoFollowUpsWork() throws Exception {
+        String admin = adminToken();
+        String user = newUserToken();
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "leave-policy.txt", "text/plain", POLICY_TEXT.getBytes(StandardCharsets.UTF_8));
+        String uploaded = mockMvc.perform(multipart("/documents/upload").file(file).header(HttpHeaders.AUTHORIZATION, bearer(admin)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        long documentId = readJson(uploaded).get("id").asLong();
+
+        String failed = streamEvents(user, Map.of(
+                "query", "How many paid vacation days per year? " + FakeAiConfiguration.FAIL_STREAM_MARKER));
+        assertThat(failed).contains("event:meta", "event:error").doesNotContain("event:done");
+        String idMarker = "\"conversationId\":";
+        int start = failed.indexOf(idMarker) + idMarker.length();
+        long conversationId = Long.parseLong(failed.substring(start, failed.indexOf(',', start)));
+
+        Map<String, Object> followUp = new HashMap<>();
+        followUp.put("query", "How many paid vacation days per year?");
+        followUp.put("conversationId", conversationId);
+        assertThat(streamEvents(user, followUp)).contains("event:done").doesNotContain("event:error");
+
+        // Tests share one database; don't leave documents behind for retrieval assertions elsewhere.
+        mockMvc.perform(delete("/documents/{id}", documentId).header(HttpHeaders.AUTHORIZATION, bearer(admin)))
+                .andExpect(status().isNoContent());
+    }
+
+    private String streamEvents(String token, Map<String, ?> body) throws Exception {
+        MvcResult result = mockMvc.perform(post("/chat/stream")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(body)))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        result.getAsyncResult(10_000);
+        return result.getResponse().getContentAsString();
+    }
+
+    @Test
     void streamingRejectsUnknownConversationWithJsonError() throws Exception {
         String user = newUserToken();
 

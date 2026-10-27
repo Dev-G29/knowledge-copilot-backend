@@ -25,6 +25,8 @@ import reactor.core.publisher.Flux;
 public class FakeAiConfiguration {
 
     public static final String FAKE_ANSWER = "This is a grounded fake answer.";
+    // A question containing this makes the fake stream fail midway, like a Gemini error.
+    public static final String FAIL_STREAM_MARKER = "simulate-stream-failure";
     public static final List<String> FAKE_STREAM_TOKENS = List.of("This ", "is ", "a ", "streamed ", "answer.");
 
     @Bean
@@ -67,6 +69,9 @@ public class FakeAiConfiguration {
 
             @Override
             public Flux<ChatResponse> stream(Prompt prompt) {
+                if (prompt.getContents().contains(FAIL_STREAM_MARKER)) {
+                    return Flux.concat(Flux.just(response("Partial ")), Flux.error(new IllegalStateException("simulated Gemini failure")));
+                }
                 return Flux.fromIterable(FAKE_STREAM_TOKENS).map(this::response);
             }
 
