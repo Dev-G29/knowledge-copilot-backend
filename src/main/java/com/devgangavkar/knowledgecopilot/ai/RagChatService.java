@@ -16,6 +16,7 @@ import com.devgangavkar.knowledgecopilot.security.CurrentUserService;
 import com.devgangavkar.knowledgecopilot.service.ChatService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -25,6 +26,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -51,6 +53,7 @@ public class RagChatService implements ChatService {
     private static final int TITLE_LENGTH = 80;
     private static final String NO_RELEVANT_CONTEXT_MESSAGE = "No relevant information found in uploaded documents.";
     private static final String STREAM_FAILURE_MESSAGE = "The assistant could not finish this answer. Please try again.";
+    private static final String SLOW_MODEL_MESSAGE = "The AI model is taking too long to respond. Please try again in a moment.";
 
     private final VectorSearchService vectorSearchService;
     private final ObjectProvider<ChatModel> chatModelProvider;
@@ -162,7 +165,8 @@ public class RagChatService implements ChatService {
                     // Keep the conversation: the client already received its id in the "meta" event and
                     // will send follow-ups to it. While it has no messages it stays hidden from the list.
                     finished.set(true);
-                    return Mono.just(event("error", new ChatStreamEvents.Error(STREAM_FAILURE_MESSAGE)));
+                    String message = hasCause(exception, TimeoutException.class) ? SLOW_MODEL_MESSAGE : STREAM_FAILURE_MESSAGE;
+                    return Mono.just(event("error", new ChatStreamEvents.Error(message)));
                 })
                 .doOnCancel(() -> {
                     // The client stopped the answer or went away: keep whatever was generated so far.
@@ -173,7 +177,11 @@ public class RagChatService implements ChatService {
                     if (!partialAnswer.isEmpty()) {
                         persist(prepared, partialAnswer);
                     }
-                });
+                })
+                // The Gemini client blocks the thread that subscribes to its stream. Spring MVC
+                // subscribes on the request thread before the response is set up, so without this
+                // every event (even "meta") was buffered until the whole answer had been generated.
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     private PreparedQuery prepare(String normalizedQuery, Long conversationId) {
@@ -449,11 +457,26 @@ public class RagChatService implements ChatService {
     }
 
     private Flux<String> streamAnswer(String promptText) {
-        return Flux.defer(() -> requireChatModel().stream(new Prompt(promptText)))
+        Flux<ChatResponse> responses = Flux.defer(() -> requireChatModel().stream(new Prompt(promptText)));
+        int timeoutSeconds = applicationProperties.rag().firstTokenTimeoutSeconds();
+        if (timeoutSeconds > 0) {
+            // Only the wait for the first chunk is limited; once the model is answering, let it finish.
+            responses = responses.timeout(Mono.delay(Duration.ofSeconds(timeoutSeconds)), ignored -> Mono.never());
+        }
+        return responses
                 .map(this::extractText)
                 .filter(text -> !text.isEmpty())
                 .onErrorMap(exception -> !(exception instanceof AiServiceException),
                         exception -> new AiServiceException("Failed to generate response from AI model", exception));
+    }
+
+    private static boolean hasCause(Throwable throwable, Class<? extends Throwable> type) {
+        for (Throwable current = throwable; current != null; current = current.getCause()) {
+            if (type.isInstance(current)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String extractText(ChatResponse response) {

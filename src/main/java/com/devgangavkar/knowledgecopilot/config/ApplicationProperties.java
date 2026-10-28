@@ -44,7 +44,9 @@ public record ApplicationProperties(
 
     public record Rag(
             // Chunks with a cosine similarity below this are ignored when building the prompt.
-            double minRelevanceScore
+            double minRelevanceScore,
+            // How long to wait for the model's first token before giving up (0 disables the limit).
+            int firstTokenTimeoutSeconds
     ) {
     }
 }
