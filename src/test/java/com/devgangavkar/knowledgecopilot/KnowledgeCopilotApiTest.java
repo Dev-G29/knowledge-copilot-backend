@@ -190,6 +190,37 @@ class KnowledgeCopilotApiTest extends IntegrationTest {
                 .andExpect(status().isNoContent());
     }
 
+    @Test
+    void streamingDoesNotHoldTheRequestThreadWhileTheModelIsBusy() throws Exception {
+        String admin = adminToken();
+        String user = newUserToken();
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "blocking-policy.txt", "text/plain", POLICY_TEXT.getBytes(StandardCharsets.UTF_8));
+        String uploaded = mockMvc.perform(multipart("/documents/upload").file(file).header(HttpHeaders.AUTHORIZATION, bearer(admin)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        long documentId = readJson(uploaded).get("id").asLong();
+
+        long startedAt = System.nanoTime();
+        MvcResult result = mockMvc.perform(post("/chat/stream")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(user))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("query", "How many paid vacation days per year? " + FakeAiConfiguration.BLOCKING_STREAM_MARKER))))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        long handlerMillis = (System.nanoTime() - startedAt) / 1_000_000;
+
+        // The request thread must be released before the model answers, otherwise nothing
+        // (not even the "meta" event) reaches the browser until the whole answer is done.
+        assertThat(handlerMillis).isLessThan(FakeAiConfiguration.BLOCKING_STREAM_DELAY_MS - 500);
+
+        result.getAsyncResult(10_000);
+        assertThat(result.getResponse().getContentAsString()).contains("event:meta", "event:token", "event:done");
+
+        mockMvc.perform(delete("/documents/{id}", documentId).header(HttpHeaders.AUTHORIZATION, bearer(admin)))
+                .andExpect(status().isNoContent());
+    }
+
     private String streamEvents(String token, Map<String, ?> body) throws Exception {
         MvcResult result = mockMvc.perform(post("/chat/stream")
                         .header(HttpHeaders.AUTHORIZATION, bearer(token))

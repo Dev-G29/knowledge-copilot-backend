@@ -25,6 +25,11 @@ import reactor.core.publisher.Flux;
 public class FakeAiConfiguration {
 
     public static final String FAKE_ANSWER = "This is a grounded fake answer.";
+    // A question containing this makes the fake stream never produce anything.
+    public static final String HANGING_STREAM_MARKER = "simulate-hanging-stream";
+    // A question containing this makes the fake stream block its subscribing thread before answering.
+    public static final String BLOCKING_STREAM_MARKER = "simulate-blocking-stream";
+    public static final long BLOCKING_STREAM_DELAY_MS = 1500;
     // A question containing this makes the fake stream fail midway, like a Gemini error.
     public static final String FAIL_STREAM_MARKER = "simulate-stream-failure";
     public static final List<String> FAKE_STREAM_TOKENS = List.of("This ", "is ", "a ", "streamed ", "answer.");
@@ -69,6 +74,21 @@ public class FakeAiConfiguration {
 
             @Override
             public Flux<ChatResponse> stream(Prompt prompt) {
+                if (prompt.getContents().contains(HANGING_STREAM_MARKER)) {
+                    // Like gemini-3.8-flash on an overloaded free key: never starts answering.
+                    return Flux.never();
+                }
+                if (prompt.getContents().contains(BLOCKING_STREAM_MARKER)) {
+                    // Like the real Gemini client: the HTTP call blocks whichever thread subscribes.
+                    return Flux.defer(() -> {
+                        try {
+                            Thread.sleep(BLOCKING_STREAM_DELAY_MS);
+                        } catch (InterruptedException interrupted) {
+                            Thread.currentThread().interrupt();
+                        }
+                        return Flux.fromIterable(FAKE_STREAM_TOKENS).map(this::response);
+                    });
+                }
                 if (prompt.getContents().contains(FAIL_STREAM_MARKER)) {
                     return Flux.concat(Flux.just(response("Partial ")), Flux.error(new IllegalStateException("simulated Gemini failure")));
                 }

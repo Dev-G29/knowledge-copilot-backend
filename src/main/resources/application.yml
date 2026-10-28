@@ -19,7 +19,7 @@ spring:
         api-key: ${GEMINI_API_KEY:}
         chat:
           options:
-            model: ${GEMINI_CHAT_MODEL:gemini-3.8-flash}
+            model: ${GEMINI_CHAT_MODEL:gemini-3.6-flash}
             # Gemini 3.x "thinks" before answering. RAG answers are short lookups, so a low level
             # cuts time-to-first-token a lot. MINIMAL | LOW | MEDIUM | HIGH
             thinking-level: ${GEMINI_THINKING_LEVEL:LOW}
@@ -91,3 +91,4 @@ application:
     auth-requests-per-minute: ${RATE_LIMIT_AUTH_PER_MINUTE:10}
   rag:
     min-relevance-score: ${RAG_MIN_RELEVANCE_SCORE:0.25}
+    first-token-timeout-seconds: ${RAG_FIRST_TOKEN_TIMEOUT_SECONDS:45}

@@ -9,7 +9,7 @@ Spring Boot API for Knowledge Copilot, a retrieval-augmented generation (RAG) as
 1. **Ingest**: PDFBox and Apache POI extract text, which is split into ~800-character passages with overlap.
 2. **Embed**: each passage is embedded with `gemini-embedding-001` (3072 dimensions, task type `RETRIEVAL_DOCUMENT`) and stored in a `vector(3072)` column.
 3. **Retrieve**: the question is embedded (`RETRIEVAL_QUERY`) and Postgres finds the nearest passages through an HNSW index on `halfvec`. Results are filtered by score and balanced across documents.
-4. **Generate**: `gemini-3.8-flash` answers from those passages plus recent turns. Answers come back whole (`/chat/query`) or streamed (`/chat/stream`).
+4. **Generate**: `gemini-3.6-flash` answers from those passages plus recent turns. Answers come back whole (`/chat/query`) or streamed (`/chat/stream`).
 
 ## API
 
@@ -70,7 +70,7 @@ They cover migrations (including converting the old Render schema), vector searc
 |---|---|---|
 | `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` | local Postgres | JDBC connection |
 | `GEMINI_API_KEY` | — | Required for chat and embeddings |
-| `GEMINI_CHAT_MODEL` | `gemini-3.8-flash` | |
+| `GEMINI_CHAT_MODEL` | `gemini-3.6-flash` | |
 | `GEMINI_THINKING_LEVEL` | `LOW` | `MINIMAL` is fastest; `MEDIUM`/`HIGH` reason longer before answering |
 | `JWT_SECRET` | dev-only value | **Required** with `SPRING_PROFILES_ACTIVE=prod` (e.g. `openssl rand -base64 48`) |
 | `JWT_EXPIRATION_MINUTES` | `1440` | |
@@ -79,6 +79,7 @@ They cover migrations (including converting the old Render schema), vector searc
 | `ADMIN_SYNC_PASSWORD` | `false` | `true` resets an existing admin's password on startup |
 | `RATE_LIMIT_CHAT_PER_MINUTE` | `20` | Per user |
 | `RAG_MIN_RELEVANCE_SCORE` | `0.25` | Minimum cosine similarity for a passage to be used |
+| `RAG_FIRST_TOKEN_TIMEOUT_SECONDS` | `45` | Give up (with a clear message) if the model hasn't started answering by then; `0` disables |
 
 Schema changes go through Flyway (`src/main/resources/db/migration`). Hibernate only validates the schema.
 
